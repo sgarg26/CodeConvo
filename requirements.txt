@@ -1,0 +1,4 @@
+boto3
+amazon_transcribe
+anthropic[bedrock]
+pyaudio
