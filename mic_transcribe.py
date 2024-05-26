@@ -117,7 +117,7 @@ async def basic_transcribe():
 
     # Instantiate our handler and start processing events
     # handler = MyEventHandler(stream.output_stream)
-    handler = StoreTranscript(stream.output_stream)
+    handler = MyEventHandler(stream.output_stream)
 
     await asyncio.gather(write_chunks(stream), handler.handle_events())
 
