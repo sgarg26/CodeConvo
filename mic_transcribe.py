@@ -4,6 +4,7 @@ import asyncio
 # microphone. It's not a dependency of the project but can be installed with
 # `pip install sounddevice`.
 import sounddevice
+import threading
 from threading import Thread
 import tkinter
 
@@ -54,6 +55,7 @@ class MyEventHandler(TranscriptResultStreamHandler):
             if not result.is_partial:
                 s = result.alternatives[-1].transcript
                 self.transcript += f"{s}\n"
+                Thread(target=get_message, args=(s,), daemon=True).start()
                 print(s)
                 # ans = await get_message(s)
                 # if not ans == "No":
@@ -69,11 +71,11 @@ class MyEventHandler(TranscriptResultStreamHandler):
 
 def listen_for_input(handler: MyEventHandler):
     while True:
-        # user_in = input("Press q to quit")
+        user_in = input("Press q to quit")
         transcript = handler.get_transcript()
-        print(f"transcript: {transcript}")
-        # if user_in == "q":
-        get_message(transcript)
+        # print(f"transcript: {transcript}")
+        if user_in == "q":
+            get_message(transcript)
 
 async def mic_stream():
     # This function wraps the raw input stream from the microphone forwarding
@@ -125,7 +127,7 @@ async def basic_transcribe():
     # Instantiate our handler and start processing events
     # handler = MyEventHandler(stream.output_stream)
     handler = MyEventHandler(stream.output_stream)
-    Thread(target=listen_for_input, args=(handler,), daemon=True).start()
+    # Thread(target=listen_for_input, args=(handler,), daemon=True).start()
     await asyncio.gather(write_chunks(stream), handler.handle_events())
     # transcript = handler.get_transcript()
     # print(transcript)
