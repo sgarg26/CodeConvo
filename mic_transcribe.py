@@ -8,7 +8,7 @@ import sounddevice
 
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
-from amazon_transcribe.model import TranscriptEvent
+from amazon_transcribe.model import TranscriptEvent, TranscriptResultStream
 
 from anthropic import AnthropicBedrock
 
@@ -40,17 +40,11 @@ async def get_message(msg):
         # print()
     return s
 
-class StoreTranscript(TranscriptResultStreamHandler):
-    async def handle_transcript_event(self, transcript_event: TranscriptEvent):
-        results = transcript_event.transcript.results
-        for result in results:
-            if not result.is_partial:
-                s = result.alternatives[-1].transcript
-                print(s)
-                # self.transcript += s + "\n"
-
-
 class MyEventHandler(TranscriptResultStreamHandler):
+
+    def __init__(self, transcript_result_stream: TranscriptResultStream):
+        super().__init__(transcript_result_stream)
+        self.transcript = ""
 
     async def handle_transcript_event(self, transcript_event: TranscriptEvent):
         # This handler can be implemented to handle transcriptions as needed.
@@ -59,13 +53,16 @@ class MyEventHandler(TranscriptResultStreamHandler):
         for result in results:
             if not result.is_partial:
                 s = result.alternatives[-1].transcript
-                ans = await get_message(s)
-                if not ans == "No":
-                    print(f"{s}: {ans}")
-            # for alt in result.alternatives:
-            #     print(alt.transcript)
-
-
+                self.transcript += f"{s}\n"
+                print(s)
+                # ans = await get_message(s)
+                # if not ans == "No":
+                #     print(f"{s}: {ans}")
+                # for alt in result.alternatives:
+                #     print(alt.transcript)
+                
+    def get_transcript(self):
+        return self.transcript
 
 async def mic_stream():
     # This function wraps the raw input stream from the microphone forwarding
@@ -104,7 +101,6 @@ async def write_chunks(stream):
 
 async def basic_transcribe():
     # Setup up our client with our chosen AWS region
-    transcript = ""
     client = TranscribeStreamingClient(region="us-east-1")
 
     # Start transcription to generate our async stream
@@ -118,9 +114,10 @@ async def basic_transcribe():
     # Instantiate our handler and start processing events
     # handler = MyEventHandler(stream.output_stream)
     handler = MyEventHandler(stream.output_stream)
-
     await asyncio.gather(write_chunks(stream), handler.handle_events())
-
+    print("moving beyond...")
+    # transcript = handler.get_transcript()
+    # print(transcript)
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(basic_transcribe())
