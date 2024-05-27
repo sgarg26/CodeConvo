@@ -4,7 +4,7 @@ import asyncio
 # microphone. It's not a dependency of the project but can be installed with
 # `pip install sounddevice`.
 import sounddevice
-
+import threading
 
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
@@ -20,6 +20,12 @@ handler will simply print the text out to your interpreter.
 """
 
 client = AnthropicBedrock()
+
+def listen_for_input():
+    while True:
+        user_in = input("Press q to quit")
+        if user_in == "q":
+            print("q pressed!")
 
 async def get_message(msg):
     s = ""
@@ -63,6 +69,9 @@ class MyEventHandler(TranscriptResultStreamHandler):
                 
     def get_transcript(self):
         return self.transcript
+
+    def reset_transcript(self):
+        self.transcript = ""
 
 async def mic_stream():
     # This function wraps the raw input stream from the microphone forwarding
@@ -114,8 +123,8 @@ async def basic_transcribe():
     # Instantiate our handler and start processing events
     # handler = MyEventHandler(stream.output_stream)
     handler = MyEventHandler(stream.output_stream)
+    threading.Thread(target=listen_for_input, daemon=True).start()
     await asyncio.gather(write_chunks(stream), handler.handle_events())
-    print("moving beyond...")
     # transcript = handler.get_transcript()
     # print(transcript)
 
