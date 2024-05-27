@@ -4,7 +4,8 @@ import asyncio
 # microphone. It's not a dependency of the project but can be installed with
 # `pip install sounddevice`.
 import sounddevice
-import threading
+from threading import Thread
+import tkinter
 
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
@@ -21,30 +22,23 @@ handler will simply print the text out to your interpreter.
 
 client = AnthropicBedrock()
 
-def listen_for_input():
-    while True:
-        user_in = input("Press q to quit")
-        if user_in == "q":
-            print("q pressed!")
-
-async def get_message(msg):
-    s = ""
+def get_message(msg):
     with client.messages.stream(
         max_tokens=256,
         messages=[
             {
                 "role": "user",
-                "content": f"Assume you're a developer. Identify if there's a valid question in the message in quotes. \
-                If there's no question, just answer 'no', and if there is, remember to answer it concisely: '{msg}'"
+                "content": f"Assume you're an AWS developer. Identify any valid questions in the following text wrapped in quotes, \
+                and answer them concisely. Return each question and answer as a key value pair: '{msg}'"
             }
         ],
-        model="anthropic.claude-3-sonnet-20240229-v1:0",
+        model="anthropic.claude-3-haiku-20240307-v1:0"
     ) as stream:
         for text in stream.text_stream:
-            # print(text, "printed here", end="", flush=True)
-            s += text
-        # print()
-    return s
+            print(text, end="", flush=True)
+            # s += text
+        print()
+    # return s
 
 class MyEventHandler(TranscriptResultStreamHandler):
 
@@ -72,6 +66,14 @@ class MyEventHandler(TranscriptResultStreamHandler):
 
     def reset_transcript(self):
         self.transcript = ""
+
+def listen_for_input(handler: MyEventHandler):
+    while True:
+        # user_in = input("Press q to quit")
+        transcript = handler.get_transcript()
+        print(f"transcript: {transcript}")
+        # if user_in == "q":
+        get_message(transcript)
 
 async def mic_stream():
     # This function wraps the raw input stream from the microphone forwarding
@@ -123,7 +125,7 @@ async def basic_transcribe():
     # Instantiate our handler and start processing events
     # handler = MyEventHandler(stream.output_stream)
     handler = MyEventHandler(stream.output_stream)
-    threading.Thread(target=listen_for_input, daemon=True).start()
+    Thread(target=listen_for_input, args=(handler,), daemon=True).start()
     await asyncio.gather(write_chunks(stream), handler.handle_events())
     # transcript = handler.get_transcript()
     # print(transcript)
