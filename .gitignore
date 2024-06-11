@@ -1,4 +1,4 @@
-*
-!.gitignore
-!mic_transcribe.py
-!requirements.txt
+/__pycache__
+/.venv
+static/*
+templates/*

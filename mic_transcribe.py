@@ -4,9 +4,8 @@ import asyncio
 # microphone. It's not a dependency of the project but can be installed with
 # `pip install sounddevice`.
 import sounddevice
-import threading
 from threading import Thread
-import tkinter
+from flask import Flask
 
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler

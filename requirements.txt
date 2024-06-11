@@ -1,4 +1,3 @@
-boto3
 amazon_transcribe
 anthropic[bedrock]
-pysimplegui
+sounddevice
