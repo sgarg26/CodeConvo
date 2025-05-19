@@ -1,17 +1,16 @@
 import asyncio
+import json
 
 # This example uses the sounddevice library to get an audio stream from the
 # microphone. It's not a dependency of the project but can be installed with
 # `pip install sounddevice`.
 import sounddevice
-from threading import Thread
 
 from amazon_transcribe.client import TranscribeStreamingClient
 from amazon_transcribe.handlers import TranscriptResultStreamHandler
-from amazon_transcribe.model import TranscriptEvent, TranscriptResultStream
+from amazon_transcribe.model import TranscriptEvent
 
 from anthropic import AnthropicBedrock
-
 
 """
 Here's an example of a custom event handler you can extend to
@@ -19,63 +18,49 @@ process the returned transcription results as needed. This
 handler will simply print the text out to your interpreter.
 """
 
-client = AnthropicBedrock()
+client = AnthropicBedrock(
+    aws_region="us-east-1"
+)
 
-def get_message(msg):
-    with client.messages.stream(
+
+async def get_ai_analysis(prompt: str) -> bool:
+    resp = client.messages.create(
         max_tokens=256,
+        system="You are an AWS Solutions Architect. Concisely answer any valid AWS related questions asked in the following "
+               "conversation. Return your response as a JSON object with fields in the "
+               "specified data types {valid_question: boolean, question: str, answer: str}. Add empty string to "
+               "question and answer fields if a valid question is not asked.",
         messages=[
             {
                 "role": "user",
-                "content": f"Assume you're an AWS developer. Identify any valid questions in the following text wrapped in quotes, \
-                and answer them concisely. Return each question and answer as a key value pair. There's no need to add any other text, just the question, and the answer: '{msg}'"
-            }
+                "content": prompt
+            },
         ],
-        # model="anthropic.claude-3-sonnet-20240229-v1:0"
-        model="anthropic.claude-3-5-sonnet-20240620-v1:0"
-    ) as stream:
-        for text in stream.text_stream:
-            print(text, end="", flush=True)
-            # s += text
-        print()
-    # return s
+        model="anthropic.claude-3-haiku-20240307-v1:0"
+        # model = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    ).content[0].text
+    json_obj = json.loads(resp, strict=False)
+    if json_obj["valid_question"]:
+        await msg_queue.put(resp)
+        return True
+    return False
 
 class MyEventHandler(TranscriptResultStreamHandler):
-
-    def __init__(self, transcript_result_stream: TranscriptResultStream):
-        super().__init__(transcript_result_stream)
-        self.transcript = ""
-
     async def handle_transcript_event(self, transcript_event: TranscriptEvent):
         # This handler can be implemented to handle transcriptions as needed.
         # Here's an example to get started.
         results = transcript_event.transcript.results
         for result in results:
             if not result.is_partial:
-                s = result.alternatives[-1].transcript
-                # print(s)
-                # self.transcript += f"{s}\n"
-                Thread(target=get_message, args=(s,), daemon=True).start()
-                # print(s)
-                ans = await get_message(s)
-                if not ans == "No":
-                    print(f"{s}: {ans}")
-                for alt in result.alternatives:
-                    print(alt.transcript)
-                
-    def get_transcript(self):
-        return self.transcript
+                s = result.alternatives[0].transcript
+                b = await get_ai_analysis(s)
+                if b:
+                    msg = await msg_queue.get()
+                    msg_queue.task_done()
+                    print(msg)
+                else:
+                    print("nothing bruh")
 
-    def reset_transcript(self):
-        self.transcript = ""
-
-def listen_for_input(handler: MyEventHandler):
-    while True:
-        user_in = input("Press q to quit")
-        transcript = handler.get_transcript()
-        # print(f"transcript: {transcript}")
-        if user_in == "q":
-            get_message(transcript)
 
 async def mic_stream():
     # This function wraps the raw input stream from the microphone forwarding
@@ -93,7 +78,7 @@ async def mic_stream():
         channels=1,
         samplerate=16000,
         callback=callback,
-        blocksize=2048 * 2,
+        blocksize=1024 * 2,
         dtype="int16",
     )
     # Initiate the audio stream and asynchronously yield the audio chunks
@@ -115,23 +100,25 @@ async def write_chunks(stream):
 async def basic_transcribe():
     # Setup up our client with our chosen AWS region
     client = TranscribeStreamingClient(region="us-east-1")
+    global msg_queue
+    msg_queue = asyncio.Queue()
 
     # Start transcription to generate our async stream
     stream = await client.start_stream_transcription(
         language_code="en-US",
         media_sample_rate_hz=16000,
         media_encoding="pcm",
-        show_speaker_label=True
     )
 
     # Instantiate our handler and start processing events
-    # handler = MyEventHandler(stream.output_stream)
     handler = MyEventHandler(stream.output_stream)
-    # Thread(target=listen_for_input, args=(handler,), daemon=True).start()
     await asyncio.gather(write_chunks(stream), handler.handle_events())
-    # transcript = handler.get_transcript()
-    # print(transcript)
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(basic_transcribe())
-loop.close()
+def run():
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    loop.run_until_complete(basic_transcribe())
+    loop.close()
